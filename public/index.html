@@ -182,8 +182,8 @@ input[type=checkbox]{width:16px; height:16px; accent-color:var(--accent); cursor
 .bill-totals .due{font-weight:700; border-top:1px solid #ddd; padding-top:6px; margin-top:4px}
 @media print{
   body *{visibility:hidden}
-  #bill-print-area, #bill-print-area *, #return-bill-print-area, #return-bill-print-area *{visibility:visible}
-  #bill-print-area, #return-bill-print-area{position:absolute; left:0; top:0; width:100%}
+  #bill-print-area, #bill-print-area *, #purchase-bill-print-area, #purchase-bill-print-area *, #return-bill-print-area, #return-bill-print-area *{visibility:visible}
+  #bill-print-area, #purchase-bill-print-area, #return-bill-print-area{position:absolute; left:0; top:0; width:100%}
   .overlay{position:static !important; background:none !important; padding:0 !important}
   .modal{box-shadow:none !important; border:none !important; max-width:100% !important; padding:0 !important}
   .modal-actions{display:none !important}
@@ -232,7 +232,9 @@ input[type=checkbox]{width:16px; height:16px; accent-color:var(--accent); cursor
   .sidebar{width:100%; height:auto; flex-direction:row; align-items:center; padding:12px 14px; gap:10px}
   .brand{padding:0; border:none}
   .tag{display:none}
-  .nav-btn{width:auto; margin:0}
+  .nav-btn{width:auto; margin:0; flex-shrink:0}
+  .sidebar{overflow-x:auto}
+  .sidebar .nav-btn{font-size:12px;padding:8px 7px}
   .sidebar-foot{display:none}
   .main{height:auto; padding:22px 18px 50px}
   .table-wrap{overflow-x:auto}
@@ -247,6 +249,7 @@ input[type=checkbox]{width:16px; height:16px; accent-color:var(--accent); cursor
   <div class="tag">Inventory &amp; purchase records</div>
   <button class="nav-btn active" data-view="inventory"><span class="dot"></span>Inventory</button>
   <button class="nav-btn" data-view="customers"><span class="dot"></span>Customers</button>
+  <button class="nav-btn" data-view="purchases"><span class="dot"></span>Purchases</button>
   <button class="nav-btn" data-view="returns"><span class="dot"></span>Returns</button>
   <button class="nav-btn" data-view="receipts"><span class="dot"></span>Receipts</button>
   <div class="sidebar-foot">
@@ -281,7 +284,7 @@ input[type=checkbox]{width:16px; height:16px; accent-color:var(--accent); cursor
     </div>
     <div id="item-class-grid" class="class-grid"></div>
     <div class="table-wrap" id="inv-table-wrap" style="display:none"><table>
-      <thead><tr><th class="sel-col"><input type="checkbox" id="select-all-cb" onclick="toggleSelectAll(this)"></th><th>Item</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Value</th><th></th></tr></thead>
+      <thead><tr><th class="sel-col"><input type="checkbox" id="select-all-cb" onclick="toggleSelectAll(this)"></th><th>Item</th><th class="num">Qty</th><th class="num">Sale price</th><th class="num">Cost</th><th class="num">Stock value</th><th></th></tr></thead>
       <tbody id="inv-body"></tbody>
     </table></div>
 
@@ -291,6 +294,28 @@ input[type=checkbox]{width:16px; height:16px; accent-color:var(--accent); cursor
     <div class="table-wrap"><table>
       <thead><tr><th>Item</th><th>Customer</th><th>Date</th><th class="num">Qty sold</th><th class="num">Total</th><th></th></tr></thead>
       <tbody id="sales-body"></tbody>
+    </table></div>
+  </section>
+
+  <!-- PURCHASES -->
+  <section class="view" id="view-purchases">
+    <div class="head-row">
+      <div><h1>Supplier Purchases</h1><p class="sub">Record supplier bills, per-item discounts and the net purchase cost added to stock.</p></div>
+      <button class="primary" onclick="openPurchaseModal()">+ New supplier purchase</button>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="n" id="purchase-stat-count">0</div><div class="l">Supplier bills</div></div>
+      <div class="stat"><div class="n" id="purchase-stat-units">0</div><div class="l">Units purchased</div></div>
+      <div class="stat"><div class="n" id="purchase-stat-gross">₹0</div><div class="l">Gross purchase value</div></div>
+      <div class="stat"><div class="n" id="purchase-stat-discount">₹0</div><div class="l">Supplier discounts</div></div>
+      <div class="stat"><div class="n" id="purchase-stat-net">₹0</div><div class="l">Net purchase value</div></div>
+    </div>
+    <div class="toolbar">
+      <input type="text" class="search" id="purchase-search" placeholder="Search bill, supplier or item…" oninput="renderPurchases()">
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Bill no.</th><th>Supplier</th><th>Date</th><th>Items</th><th class="num">Units</th><th class="num">Gross</th><th class="num">Discount</th><th class="num">Net</th><th></th></tr></thead>
+      <tbody id="purchases-body"></tbody>
     </table></div>
   </section>
 
@@ -388,7 +413,9 @@ input[type=checkbox]{width:16px; height:16px; accent-color:var(--accent); cursor
     <div class="viewfield"><b>Margin / unit</b> <span id="detail-margin"></span></div>
     <div class="viewfield"><b>Distributor</b> <span id="detail-distributor"></span></div>
     <div class="viewfield"><b>Purchase date</b> <span id="detail-purchase-date"></span></div>
-    <div class="viewfield"><b>Current stock value</b> <span id="detail-value"></span></div>
+    <div class="viewfield"><b>Supplier bill no.</b> <span id="detail-purchase-bill"></span></div>
+    <div class="viewfield"><b>Last purchase discount</b> <span id="detail-purchase-discount"></span></div>
+    <div class="viewfield"><b>Current stock value at cost</b> <span id="detail-value"></span></div>
     <div class="modal-actions">
       <button class="ghost" onclick="closeItemDetail()">Close</button>
       <button class="primary" onclick="editFromDetail()">Edit item</button>
@@ -434,11 +461,76 @@ input[type=checkbox]{width:16px; height:16px; accent-color:var(--accent); cursor
     </div>
     <div class="field-row">
       <div class="field"><label>Distributor / supplier</label><input type="text" id="f-distributor" placeholder="e.g. Agarwal Traders"></div>
+      <div class="field"><label>Supplier bill number</label><input type="text" id="f-purchase-bill" placeholder="e.g. ABC/2026/1048"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Purchase discount %</label><input type="number" id="f-purchase-discount" min="0" max="100" step="0.01" value="0"></div>
       <div class="field"><label>Purchase date</label><input type="date" id="f-purchase-date"></div>
     </div>
     <div class="modal-actions">
       <button class="ghost" onclick="closeItemModal()">Cancel</button>
       <button class="primary" onclick="saveItem()">Save item</button>
+    </div>
+  </div>
+</div>
+
+<!-- Supplier purchase modal -->
+<div class="overlay" id="purchase-overlay">
+  <div class="modal" style="max-width:980px">
+    <h3>New supplier purchase</h3>
+    <div class="return-info"><b>One supplier bill can contain many items.</b><br>Enter the supplier bill number once, then apply a separate discount percentage to every line item. Net cost is calculated automatically and that discounted cost becomes the inventory cost.</div>
+    <div class="field-row">
+      <div class="field"><label>Supplier / distributor</label><input type="text" id="purchase-supplier" placeholder="e.g. ABC Educational Distributors Pvt. Ltd."></div>
+      <div class="field"><label>Supplier bill number</label><input type="text" id="purchase-bill-no" placeholder="e.g. ABC/2026/1048"></div>
+      <div class="field" style="max-width:180px"><label>Purchase date</label><input type="date" id="purchase-date"></div>
+    </div>
+    <div class="table-wrap" style="margin-top:8px;overflow:auto">
+      <table style="min-width:1050px">
+        <thead><tr><th>Item</th><th>Class</th><th>Category</th><th>Unit</th><th class="num">Qty</th><th class="num">List cost</th><th class="num">Discount %</th><th class="num">Discount ₹</th><th class="num">Net cost</th><th class="num">Sale price</th><th></th></tr></thead>
+        <tbody id="purchase-lines"></tbody>
+      </table>
+    </div>
+    <div class="toolbar" style="margin-top:12px">
+      <button type="button" class="ghost" onclick="addPurchaseLine()">+ Add item</button>
+      <span class="sub" id="purchase-line-help">Each row is one item from the supplier bill. General products are created when Class is left empty.</span>
+    </div>
+    <div class="stats" style="margin-top:14px;margin-bottom:0">
+      <div class="stat"><div class="n" id="purchase-form-gross">₹0</div><div class="l">Gross</div></div>
+      <div class="stat"><div class="n" id="purchase-form-discount">₹0</div><div class="l">Discount</div></div>
+      <div class="stat"><div class="n" id="purchase-form-net">₹0</div><div class="l">Net purchase</div></div>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closePurchaseModal()">Cancel</button>
+      <button class="primary" onclick="saveSupplierPurchase()">Save purchase &amp; update stock</button>
+    </div>
+  </div>
+</div>
+
+<!-- Supplier purchase bill modal -->
+<div class="overlay" id="purchase-bill-overlay">
+  <div class="modal" style="max-width:620px">
+    <div id="purchase-bill-print-area" class="bill-doc">
+      <div class="bill-head">
+        <div class="bill-brand">Book<span> Detail</span></div>
+        <div class="bill-no" id="purchase-bill-display-no"></div>
+      </div>
+      <div class="bill-meta">
+        <div><b>Supplier:</b> <span id="purchase-bill-supplier"></span></div>
+        <div><b>Purchase date:</b> <span id="purchase-bill-date"></span></div>
+      </div>
+      <table class="bill-table">
+        <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">List cost</th><th class="num">Disc.</th><th class="num">Net cost</th><th class="num">Amount</th></tr></thead>
+        <tbody id="purchase-bill-lines"></tbody>
+      </table>
+      <div class="bill-totals">
+        <div><span>Gross</span><span id="purchase-bill-gross"></span></div>
+        <div><span>Supplier discount</span><span id="purchase-bill-discount"></span></div>
+        <div class="due"><span>Net purchase</span><span id="purchase-bill-net"></span></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closePurchaseBillModal()">Close</button>
+      <button class="primary" onclick="window.print()">Print supplier bill</button>
     </div>
   </div>
 </div>
@@ -603,8 +695,9 @@ input[type=checkbox]{width:16px; height:16px; accent-color:var(--accent); cursor
     <div id="supplier-return-fields" style="display:none">
       <div class="return-info"><b>Supplier return</b><br>Select the book from current stock. This does not require an original sale because the book may never have been sold. The quantity will be deducted from inventory.</div>
       <div class="field"><label>Book / stock item</label><select id="return-supplier-item" onchange="loadSupplierReturnItem()"></select></div>
-      <div class="field-row"><div class="field"><label>Supplier / distributor</label><input type="text" id="return-supplier" disabled></div><div class="field"><label>Purchase date</label><input type="text" id="return-purchase-date" disabled></div></div>
-      <div class="field-row"><div class="field"><label>Current stock</label><input type="text" id="return-stock-qty" disabled></div><div class="field"><label>Cost per book</label><input type="text" id="return-cost-display" disabled></div></div>
+      <div class="field-row"><div class="field"><label>Supplier / distributor</label><input type="text" id="return-supplier" disabled></div><div class="field"><label>Supplier bill no.</label><input type="text" id="return-supplier-bill" disabled></div></div>
+      <div class="field-row"><div class="field"><label>Purchase date</label><input type="text" id="return-purchase-date" disabled></div><div class="field"><label>Cost per book (net)</label><input type="text" id="return-cost-display" disabled></div></div>
+      <div class="field-row"><div class="field"><label>Current stock</label><input type="text" id="return-stock-qty" disabled></div><div class="field"><label>Current net cost</label><input type="text" id="return-old-cost-display" disabled></div></div>
     </div>
     <div class="field-row"><div class="field"><label>Quantity being returned</label><input type="number" id="return-qty" min="1" value="1" oninput="updateReturnTotal()"></div><div class="field"><label>Return value</label><input type="text" id="return-total-display" disabled></div></div>
     <div class="field-row"><div class="field"><label id="return-by-label">Returned by</label><input type="text" id="return-by" disabled></div><div class="field"><label id="return-to-label">Returned to</label><input type="text" id="return-to" value="Book Store / Inventory"></div></div>
@@ -669,7 +762,7 @@ input[type=checkbox]{width:16px; height:16px; accent-color:var(--accent); cursor
 <script>
 /* ---------- IndexedDB ---------- */
 let db;
-const dbReq = indexedDB.open('stockledger', 5);
+const dbReq = indexedDB.open('stockledger', 6);
 dbReq.onupgradeneeded = e => {
   const d = e.target.result;
   if(!d.objectStoreNames.contains('items')) d.createObjectStore('items',{keyPath:'id'});
@@ -679,8 +772,9 @@ dbReq.onupgradeneeded = e => {
   if(!d.objectStoreNames.contains('meta')) d.createObjectStore('meta',{keyPath:'id'});
   if(!d.objectStoreNames.contains('payments')) d.createObjectStore('payments',{keyPath:'id'});
   if(!d.objectStoreNames.contains('returns')) d.createObjectStore('returns',{keyPath:'id'});
+  if(!d.objectStoreNames.contains('purchases')) d.createObjectStore('purchases',{keyPath:'id'});
 };
-dbReq.onsuccess = e => { db = e.target.result; renderInventory(); renderReceipts(); renderSales(); renderCustomers(); renderReturns(); };
+dbReq.onsuccess = e => { db = e.target.result; renderInventory(); renderReceipts(); renderSales(); renderCustomers(); renderReturns(); renderPurchases(); };
 dbReq.onerror = () => { document.body.innerHTML = '<p style="padding:40px;color:#E8ECEF">Storage unavailable in this browser — try a different browser to use Book Detail.</p>'; };
 
 function tx(store,mode){ return db.transaction(store,mode).objectStore(store); }
@@ -697,6 +791,7 @@ document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',asyn
   b.classList.add('active');
   document.getElementById('view-'+b.dataset.view).classList.add('active');
   if(b.dataset.view==='returns') await renderReturns();
+  if(b.dataset.view==='purchases') await renderPurchases();
 }));
 
 /* ---------- inventory ---------- */
@@ -722,7 +817,7 @@ async function renderInvStats(){
   const items = await getAll('items');
   document.getElementById('stat-count').textContent = items.length;
   document.getElementById('stat-units').textContent = items.reduce((s,i)=>s+Number(i.qty||0),0);
-  document.getElementById('stat-value').textContent = money(items.reduce((s,i)=>s+Number(i.qty||0)*Number(i.price||0),0));
+  document.getElementById('stat-value').textContent = money(items.reduce((s,i)=>s+Number(i.qty||0)*Number(i.cost||0),0));
   document.getElementById('stat-low').textContent = items.filter(i=>i.min!=null && Number(i.qty)<=Number(i.min)).length;
 }
 
@@ -734,7 +829,7 @@ async function renderItemClassGrid(){
   const items = await getAll('items');
   let tiles = CLASS_LIST.map(cls=>{
     const group = items.filter(i=>i.classGroup===cls);
-    const value = group.reduce((s,i)=>s+Number(i.qty||0)*Number(i.price||0),0);
+    const value = group.reduce((s,i)=>s+Number(i.qty||0)*Number(i.cost||0),0);
     return { label: cls, count: group.length, value, key: cls, general:false };
   });
 
@@ -746,7 +841,7 @@ async function renderItemClassGrid(){
   tiles.push({
     label:'General Products',
     count: general.length,
-    value: general.reduce((s,i)=>s+Number(i.qty||0)*Number(i.price||0),0),
+    value: general.reduce((s,i)=>s+Number(i.qty||0)*Number(i.cost||0),0),
     key:'',
     general:true
   });
@@ -792,8 +887,8 @@ async function renderInvTable(cls, q){
   const body = document.getElementById('inv-body');
   if(!filtered.length){
     body.innerHTML = q
-      ? `<tr><td colspan="6"><div class="empty"><b>No matches</b>Try a different search.</div></td></tr>`
-      : `<tr><td colspan="6"><div class="empty"><b>No items here yet</b>Add an item to this group to get started.</div></td></tr>`;
+      ? `<tr><td colspan="7"><div class="empty"><b>No matches</b>Try a different search.</div></td></tr>`
+      : `<tr><td colspan="7"><div class="empty"><b>No items here yet</b>Add an item to this group to get started.</div></td></tr>`;
   } else {
     body.innerHTML = filtered.map(i=>{
       const low = i.min!=null && Number(i.qty) <= Number(i.min);
@@ -802,7 +897,8 @@ async function renderInvTable(cls, q){
         <td><div class="item-name">${esc(i.name)}</div><div class="item-cat">${esc(i.classGroup||i.cat||'—')}${i.unit?' · '+esc(i.unit):''}${i.distributor?' · from '+esc(i.distributor):''}</div></td>
         <td class="num"><span class="qty-badge ${low?'qty-low':'qty-ok'}">${i.qty}</span></td>
         <td class="num">${money(i.price)}</td>
-        <td class="num">${money(i.qty*i.price)}</td>
+        <td class="num">${i.cost!=null?money(i.cost):'—'}</td>
+        <td class="num">${money(Number(i.qty||0)*Number(i.cost||0))}</td>
         <td><div class="row-actions">
           <button class="act-btn act-edit act-icon-only" title="View details" onclick="openItemDetail('${i.id}')">ℹ️</button>
           <button class="act-btn act-sell" title="Sell" onclick="openSellModal('${i.id}')">↓ Sell</button>
@@ -973,11 +1069,14 @@ async function openItemModal(id, presetClass){
     document.getElementById('f-min').value = it.min ?? ''; document.getElementById('f-price').value = it.price;
     document.getElementById('f-cost').value = it.cost ?? '';
     document.getElementById('f-distributor').value = it.distributor||'';
+    document.getElementById('f-purchase-bill').value = it.purchaseBillNo||'';
+    document.getElementById('f-purchase-discount').value = it.purchaseDiscountPct ?? 0;
     document.getElementById('f-purchase-date').value = it.purchaseDate||'';
     document.getElementById('f-class').value = it.classGroup||'';
   } else {
     document.getElementById('item-modal-title').textContent = 'Add item';
-    ['f-name','f-cat','f-unit','f-qty','f-min','f-price','f-cost','f-distributor'].forEach(id=>document.getElementById(id).value='');
+    ['f-name','f-cat','f-unit','f-qty','f-min','f-price','f-cost','f-distributor','f-purchase-bill'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('f-purchase-discount').value = 0;
     document.getElementById('f-purchase-date').value = new Date().toISOString().slice(0,10);
     document.getElementById('f-class').value = (presetClass || presetClass==='') ? presetClass : '';
   }
@@ -998,6 +1097,8 @@ async function saveItem(){
     price: Number(document.getElementById('f-price').value||0),
     cost: document.getElementById('f-cost').value===''?null:Number(document.getElementById('f-cost').value),
     distributor: document.getElementById('f-distributor').value.trim(),
+    purchaseBillNo: document.getElementById('f-purchase-bill').value.trim(),
+    purchaseDiscountPct: Number(document.getElementById('f-purchase-discount').value||0),
     purchaseDate: document.getElementById('f-purchase-date').value||'',
   });
   closeItemModal(); renderInventory();
@@ -1023,7 +1124,9 @@ async function openItemDetail(id){
   }
   document.getElementById('detail-distributor').textContent = it.distributor || '—';
   document.getElementById('detail-purchase-date').textContent = it.purchaseDate || '—';
-  document.getElementById('detail-value').textContent = money(it.qty*it.price);
+  document.getElementById('detail-purchase-bill').textContent = it.purchaseBillNo || '—';
+  document.getElementById('detail-purchase-discount').textContent = Number(it.purchaseDiscountPct||0) > 0 ? Number(it.purchaseDiscountPct).toFixed(2)+'%' : '—';
+  document.getElementById('detail-value').textContent = money(Number(it.qty||0)*Number(it.cost||0));
   document.getElementById('item-detail-overlay').classList.add('active');
 }
 function closeItemDetail(){ document.getElementById('item-detail-overlay').classList.remove('active'); _detailItemId=null; }
@@ -1033,6 +1136,177 @@ function editFromDetail(){
   if(id) openItemModal(id);
 }
 async function removeItem(id){ showConfirm('Delete this item?', async ()=>{ await del('items',id); renderInventory(); }); }
+
+/* ---------- supplier purchases ---------- */
+let purchaseLineSeq = 0;
+function openPurchaseModal(){
+  document.getElementById('purchase-supplier').value='';
+  document.getElementById('purchase-bill-no').value='';
+  document.getElementById('purchase-date').value=new Date().toISOString().slice(0,10);
+  document.getElementById('purchase-lines').innerHTML='';
+  purchaseLineSeq=0;
+  addPurchaseLine();
+  document.getElementById('purchase-overlay').classList.add('active');
+  updatePurchaseFormTotals();
+}
+function closePurchaseModal(){document.getElementById('purchase-overlay').classList.remove('active');}
+function addPurchaseLine(data={}){
+  const id=++purchaseLineSeq;
+  const tr=document.createElement('tr');
+  tr.dataset.lineId=id;
+  tr.innerHTML=`
+    <td><input type="text" class="pl-name" placeholder="Item name" value="${esc(data.name||'')}"></td>
+    <td><select class="pl-class"><option value="">General</option>${CLASS_LIST.map(c=>`<option value="${esc(c)}" ${data.classGroup===c?'selected':''}>${esc(c)}</option>`).join('')}</select></td>
+    <td><input type="text" class="pl-cat" placeholder="Textbook" value="${esc(data.cat||'')}"></td>
+    <td><input type="text" class="pl-unit" placeholder="pcs" value="${esc(data.unit||'pcs')}"></td>
+    <td><input type="number" class="pl-qty" min="1" step="1" value="${data.qty||1}" oninput="updatePurchaseLine(this)"></td>
+    <td><input type="number" class="pl-cost" min="0" step="0.01" value="${data.listCost??''}" oninput="updatePurchaseLine(this)"></td>
+    <td><input type="number" class="pl-disc" min="0" max="100" step="0.01" value="${data.discountPct??0}" oninput="updatePurchaseLine(this)"></td>
+    <td class="num pl-disc-amt">₹0</td>
+    <td class="num pl-net">₹0</td>
+    <td><input type="number" class="pl-sale" min="0" step="0.01" placeholder="0" value="${data.salePrice??''}"></td>
+    <td><button type="button" class="act-btn act-delete act-icon-only" title="Remove" onclick="removePurchaseLine(this)">🗑</button></td>`;
+  document.getElementById('purchase-lines').appendChild(tr);
+  updatePurchaseLine(tr.querySelector('.pl-cost'));
+}
+function removePurchaseLine(btn){btn.closest('tr')?.remove();updatePurchaseFormTotals();}
+function updatePurchaseLine(el){
+  const tr=el.closest('tr'); if(!tr)return;
+  const qty=Math.max(0,Number(tr.querySelector('.pl-qty').value||0));
+  const cost=Math.max(0,Number(tr.querySelector('.pl-cost').value||0));
+  let pct=Math.max(0,Math.min(100,Number(tr.querySelector('.pl-disc').value||0)));
+  tr.querySelector('.pl-disc').value=pct;
+  const gross=qty*cost;
+  const discount=gross*pct/100;
+  const netUnit=cost*(1-pct/100);
+  tr.querySelector('.pl-disc-amt').textContent=money(discount);
+  tr.querySelector('.pl-net').textContent=money(netUnit);
+  updatePurchaseFormTotals();
+}
+function getPurchaseLineData(){
+  return Array.from(document.querySelectorAll('#purchase-lines tr')).map(tr=>{
+    const qty=Math.floor(Number(tr.querySelector('.pl-qty').value||0));
+    const listCost=Number(tr.querySelector('.pl-cost').value||0);
+    const discountPct=Number(tr.querySelector('.pl-disc').value||0);
+    const gross=qty*listCost;
+    const discountAmount=gross*discountPct/100;
+    const netCost=listCost*(1-discountPct/100);
+    return {
+      name:tr.querySelector('.pl-name').value.trim(),
+      classGroup:tr.querySelector('.pl-class').value,
+      cat:tr.querySelector('.pl-cat').value.trim(),
+      unit:tr.querySelector('.pl-unit').value.trim()||'pcs',
+      qty,listCost,discountPct,discountAmount,netCost,
+      salePrice:Number(tr.querySelector('.pl-sale').value||0)
+    };
+  });
+}
+function updatePurchaseFormTotals(){
+  const lines=getPurchaseLineData();
+  const gross=lines.reduce((s,l)=>s+l.qty*l.listCost,0);
+  const discount=lines.reduce((s,l)=>s+l.discountAmount,0);
+  const net=lines.reduce((s,l)=>s+l.qty*l.netCost,0);
+  document.getElementById('purchase-form-gross').textContent=money(gross);
+  document.getElementById('purchase-form-discount').textContent=money(discount);
+  document.getElementById('purchase-form-net').textContent=money(net);
+}
+async function nextPurchaseBillNo(){
+  const metaAll=await getAll('meta');
+  const rec=metaAll.find(m=>m.id==='purchaseBillSeq')||{id:'purchaseBillSeq',value:0};
+  const next=Number(rec.value||0)+1;
+  await put('meta',{id:'purchaseBillSeq',value:next});
+  return 'PUR-'+String(next).padStart(4,'0');
+}
+async function saveSupplierPurchase(){
+  const supplier=document.getElementById('purchase-supplier').value.trim();
+  const typedBill=document.getElementById('purchase-bill-no').value.trim();
+  const date=document.getElementById('purchase-date').value||new Date().toISOString().slice(0,10);
+  const lines=getPurchaseLineData();
+  if(!supplier){showToast('Enter the supplier / distributor name.');return;}
+  if(!typedBill){showToast('Enter the supplier bill number.');return;}
+  if(!lines.length){showToast('Add at least one item to the supplier bill.');return;}
+  for(const l of lines){
+    if(!l.name){showToast('Every purchase line needs an item name.');return;}
+    if(!Number.isInteger(l.qty)||l.qty<=0){showToast(`Quantity for ${l.name} must be a whole number greater than 0.`);return;}
+    if(l.listCost<0||l.discountPct<0||l.discountPct>100){showToast(`Check cost/discount for ${l.name}.`);return;}
+    if(l.salePrice<0){showToast(`Sale price for ${l.name} cannot be negative.`);return;}
+  }
+  const purchaseId=uid();
+  const gross=lines.reduce((s,l)=>s+l.qty*l.listCost,0);
+  const totalDiscount=lines.reduce((s,l)=>s+l.discountAmount,0);
+  const netTotal=lines.reduce((s,l)=>s+l.qty*l.netCost,0);
+  const purchaseBillNo=typedBill;
+  const items=await getAll('items');
+  const savedLines=[];
+  for(const l of lines){
+    const norm=l.name.toLowerCase().replace(/\s+/g,' ').trim();
+    let item=items.find(i=>String(i.name||'').toLowerCase().replace(/\s+/g,' ').trim()===norm && String(i.classGroup||'')===String(l.classGroup||''));
+    if(item){
+      item.qty=Number(item.qty||0)+l.qty;
+      item.cat=l.cat||item.cat||'';
+      item.unit=l.unit||item.unit||'pcs';
+      item.cost=Number(l.netCost.toFixed(2));
+      if(l.salePrice>0) item.price=l.salePrice;
+      item.distributor=supplier;
+      item.purchaseDate=date;
+      item.purchaseBillNo=purchaseBillNo;
+      item.purchaseId=purchaseId;
+      item.purchaseListCost=Number(l.listCost.toFixed(2));
+      item.purchaseDiscountPct=Number(l.discountPct.toFixed(2));
+      item.purchaseDiscountAmount=Number(l.discountAmount.toFixed(2));
+      item.purchaseNetCost=Number(l.netCost.toFixed(2));
+    }else{
+      item={
+        id:uid(),name:l.name,classGroup:l.classGroup||'',cat:l.cat||'',unit:l.unit||'pcs',qty:l.qty,min:null,
+        price:l.salePrice,cost:Number(l.netCost.toFixed(2)),distributor:supplier,purchaseDate:date,purchaseBillNo:purchaseBillNo,purchaseId,
+        purchaseListCost:Number(l.listCost.toFixed(2)),purchaseDiscountPct:Number(l.discountPct.toFixed(2)),purchaseDiscountAmount:Number(l.discountAmount.toFixed(2)),purchaseNetCost:Number(l.netCost.toFixed(2))
+      };
+      items.push(item);
+    }
+    await put('items',item);
+    savedLines.push({...l,itemId:item.id,itemName:item.name});
+  }
+  const purchase={id:purchaseId,purchaseBillNo,supplierName:supplier,date,lines:savedLines,gross,totalDiscount,netTotal,createdAt:Date.now()};
+  await put('purchases',purchase);
+  closePurchaseModal();
+  await renderInventory();
+  await renderPurchases();
+  showToast(`${purchaseBillNo} saved — ${lines.length} item${lines.length!==1?'s':''} added to stock.`);
+  openPurchaseBillModal(purchase);
+}
+async function renderPurchases(){
+  if(!db)return;
+  const all=await getAll('purchases');
+  const q=(document.getElementById('purchase-search')?.value||'').trim().toLowerCase();
+  const units=all.reduce((s,p)=>s+(p.lines||[]).reduce((a,l)=>a+Number(l.qty||0),0),0);
+  const gross=all.reduce((s,p)=>s+Number(p.gross||0),0);
+  const discount=all.reduce((s,p)=>s+Number(p.totalDiscount||0),0);
+  const net=all.reduce((s,p)=>s+Number(p.netTotal||0),0);
+  document.getElementById('purchase-stat-count').textContent=all.length;
+  document.getElementById('purchase-stat-units').textContent=units;
+  document.getElementById('purchase-stat-gross').textContent=money(gross);
+  document.getElementById('purchase-stat-discount').textContent=money(discount);
+  document.getElementById('purchase-stat-net').textContent=money(net);
+  const list=all.filter(p=>!q||[p.purchaseBillNo,p.supplierName,p.date,...(p.lines||[]).map(l=>l.itemName||l.name)].some(v=>String(v||'').toLowerCase().includes(q))).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
+  const body=document.getElementById('purchases-body');
+  if(!list.length){body.innerHTML=`<tr><td colspan="9"><div class="empty"><b>${q?'No matching supplier bills':'No supplier purchases recorded yet'}</b>${q?'Try another search.':'Use New supplier purchase to record a supplier bill.'}</div></td></tr>`;return;}
+  body.innerHTML=list.map(p=>{
+    const units=(p.lines||[]).reduce((a,l)=>a+Number(l.qty||0),0);
+    return `<tr><td><b>${esc(p.purchaseBillNo||'')}</b></td><td>${esc(p.supplierName||'')}</td><td>${esc(p.date||'')}</td><td>${(p.lines||[]).length}</td><td class="num">${units}</td><td class="num">${money(p.gross)}</td><td class="num">${money(p.totalDiscount)}</td><td class="num">${money(p.netTotal)}</td><td><div class="row-actions"><button class="act-btn act-edit act-icon-only" title="View supplier bill" onclick="openPurchaseBillById('${esc(p.id)}')">🧾</button></div></td></tr>`;
+  }).join('');
+}
+async function openPurchaseBillById(id){const list=await getAll('purchases');const p=list.find(x=>x.id===id);if(p)openPurchaseBillModal(p);}
+function openPurchaseBillModal(p){
+  document.getElementById('purchase-bill-display-no').textContent=p.purchaseBillNo||'';
+  document.getElementById('purchase-bill-supplier').textContent=p.supplierName||'';
+  document.getElementById('purchase-bill-date').textContent=p.date||'';
+  document.getElementById('purchase-bill-lines').innerHTML=(p.lines||[]).map(l=>`<tr><td>${esc(l.itemName||l.name||'')}</td><td class="num">${Number(l.qty||0)}</td><td class="num">${money(l.listCost||0)}</td><td class="num">${Number(l.discountPct||0).toFixed(2)}%</td><td class="num">${money(l.netCost||0)}</td><td class="num">${money(Number(l.qty||0)*Number(l.netCost||0))}</td></tr>`).join('');
+  document.getElementById('purchase-bill-gross').textContent=money(p.gross);
+  document.getElementById('purchase-bill-discount').textContent=money(p.totalDiscount);
+  document.getElementById('purchase-bill-net').textContent=money(p.netTotal);
+  document.getElementById('purchase-bill-overlay').classList.add('active');
+}
+function closePurchaseBillModal(){document.getElementById('purchase-bill-overlay').classList.remove('active');}
 
 /* ---------- sell / stock deduction / billing ---------- */
 async function openSellModal(id){
@@ -1313,7 +1587,7 @@ async function renderCustTable(cls, q){
   const body = document.getElementById('cust-body');
   if(!rows.length){
     body.innerHTML = q
-      ? `<tr><td colspan="6"><div class="empty"><b>No matches</b>Try a different search.</div></td></tr>`
+      ? `<tr><td colspan="7"><div class="empty"><b>No matches</b>Try a different search.</div></td></tr>`
       : `<tr><td colspan="6"><div class="empty"><b>No one here yet</b>Add a customer to this group to get started.</div></td></tr>`;
     return;
   }
@@ -1591,7 +1865,7 @@ async function openReturnModal(saleId, type){
   document.getElementById('return-overlay').classList.add('active');
 }
 function clearReturnSaleFields(){['return-original-bill','return-customer','return-item','return-sold-qty','return-already-qty','return-by'].forEach(id=>document.getElementById(id).value='');document.getElementById('return-qty').value=1;document.getElementById('return-qty').max=0;document.getElementById('return-total-display').value='₹0';}
-function clearSupplierReturnFields(){['return-supplier','return-purchase-date','return-stock-qty','return-cost-display'].forEach(id=>document.getElementById(id).value='');document.getElementById('return-to').value='';document.getElementById('return-by').value='Book Store / Inventory';document.getElementById('return-qty').value=1;document.getElementById('return-qty').max=0;document.getElementById('return-total-display').value='₹0';}
+function clearSupplierReturnFields(){['return-supplier','return-supplier-bill','return-purchase-date','return-stock-qty','return-cost-display','return-old-cost-display'].forEach(id=>document.getElementById(id).value='');document.getElementById('return-to').value='';document.getElementById('return-by').value='Book Store / Inventory';document.getElementById('return-qty').value=1;document.getElementById('return-qty').max=0;document.getElementById('return-total-display').value='₹0';}
 async function toggleReturnType(){const supplier=document.getElementById('return-type').value==='supplier';document.getElementById('customer-return-fields').style.display=supplier?'none':'';document.getElementById('supplier-return-fields').style.display=supplier?'':'none';document.getElementById('return-modal-title').textContent=supplier?'Return unsold books to supplier':'Return book from student / customer';document.getElementById('return-info').innerHTML=supplier?'<b>Supplier return</b><br>Select stock that was not sold and send it back to the supplier. Inventory will decrease by the returned quantity.':'<b>Customer return</b><br>Select the original sale. The student/customer who bought the book is automatically linked to the return and the quantity is added back to inventory.';document.getElementById('return-to-label').textContent=supplier?'Returned to supplier':'Returned to';if(supplier){if(!document.getElementById('return-supplier-item').options.length) await loadSupplierReturnOptions();document.getElementById('return-to').value=document.getElementById('return-supplier').value||'';}else{if(!document.getElementById('return-sale').options.length) await loadCustomerReturnOptions();document.getElementById('return-to').value='Book Store / Inventory';}await updateReturnTotal();}
 async function loadReturnSale(){const saleId=document.getElementById('return-sale').value;if(!saleId){clearReturnSaleFields();return;}const sales=await getReturnableSales();const sale=sales.find(s=>s.id===saleId);if(!sale){clearReturnSaleFields();return;}document.getElementById('return-original-bill').value=sale.billNo||'';document.getElementById('return-customer').value=sale.customerName||'Walk-in';document.getElementById('return-item').value=sale.itemName||'';document.getElementById('return-sold-qty').value=sale.qty;document.getElementById('return-already-qty').value=sale.returnedQty;document.getElementById('return-by').value=sale.customerName||'Walk-in';document.getElementById('return-qty').max=sale.remainingQty;document.getElementById('return-qty').value=Math.min(1,sale.remainingQty);updateReturnTotal();}
 async function loadSupplierReturnOptions(){
@@ -1621,8 +1895,10 @@ async function loadSupplierReturnItem(){
   const stock = Math.max(0, Math.floor(Number(item.qty || 0)));
   document.getElementById('return-supplier').value = item.distributor || 'Supplier not set';
   document.getElementById('return-purchase-date').value = item.purchaseDate || '—';
+  document.getElementById('return-supplier-bill').value = item.purchaseBillNo || '—';
   document.getElementById('return-stock-qty').value = `${stock}${item.unit ? ' '+item.unit : ''}`;
   document.getElementById('return-cost-display').value = money(item.cost || 0);
+  document.getElementById('return-old-cost-display').value = money(item.cost || 0);
   document.getElementById('return-to').value = item.distributor || '';
   document.getElementById('return-by').value = 'Book Store / Inventory';
   document.getElementById('return-qty').max = stock;
@@ -1696,6 +1972,8 @@ async function confirmReturn(){
       reason: note || 'End of season — unsold stock returned to supplier',
       date,
       purchaseDate: item.purchaseDate || '',
+      purchaseBillNo: item.purchaseBillNo || '',
+      purchaseDiscountPct: Number(item.purchaseDiscountPct || 0),
       createdAt: Date.now()
     };
 
@@ -1778,7 +2056,7 @@ async function confirmReturn(){
   openReturnBillModal(record);
 }
 async function openReturnBillById(id){const list=await getAll('returns');const r=list.find(x=>x.id===id);if(r)openReturnBillModal(r);}
-function openReturnBillModal(r){activeReturnId=r.id;const supplier=r.returnType==='supplier';document.getElementById('return-bill-no').textContent=r.returnBillNo||'';document.getElementById('return-bill-type-label').textContent=supplier?'Supplier return receipt':'Customer return receipt';document.getElementById('return-bill-original').textContent=supplier?(r.purchaseDate?`Purchase date: ${r.purchaseDate}`:'Unsold stock'):(r.originalBillNo||'—');document.getElementById('return-bill-customer').textContent=supplier?(r.returnedBy||'Book Store / Inventory'):(r.customerName||'Walk-in');document.getElementById('return-bill-to').textContent=r.returnedTo||(supplier?r.supplierName||'Supplier':'Book Store / Inventory');document.getElementById('return-bill-date').textContent=r.date||'';document.getElementById('return-bill-item').textContent=r.itemName||'';document.getElementById('return-bill-qty').textContent=r.qty||0;document.getElementById('return-bill-rate').textContent=money(r.unitPrice||0);document.getElementById('return-bill-amount').textContent=money(r.amount||0);document.getElementById('return-bill-total').textContent=money(r.amount||0);document.getElementById('return-bill-overlay').classList.add('active');}
+function openReturnBillModal(r){activeReturnId=r.id;const supplier=r.returnType==='supplier';document.getElementById('return-bill-no').textContent=r.returnBillNo||'';document.getElementById('return-bill-type-label').textContent=supplier?'Supplier return receipt':'Customer return receipt';document.getElementById('return-bill-original').textContent=supplier?([r.purchaseBillNo?`Supplier bill: ${r.purchaseBillNo}`:'',r.purchaseDate?`Purchase date: ${r.purchaseDate}`:''].filter(Boolean).join(' · ')||'Unsold stock'):(r.originalBillNo||'—');document.getElementById('return-bill-customer').textContent=supplier?(r.returnedBy||'Book Store / Inventory'):(r.customerName||'Walk-in');document.getElementById('return-bill-to').textContent=r.returnedTo||(supplier?r.supplierName||'Supplier':'Book Store / Inventory');document.getElementById('return-bill-date').textContent=r.date||'';document.getElementById('return-bill-item').textContent=r.itemName||'';document.getElementById('return-bill-qty').textContent=r.qty||0;document.getElementById('return-bill-rate').textContent=money(r.unitPrice||0);document.getElementById('return-bill-amount').textContent=money(r.amount||0);document.getElementById('return-bill-total').textContent=money(r.amount||0);document.getElementById('return-bill-overlay').classList.add('active');}
 function closeReturnBillModal(){document.getElementById('return-bill-overlay').classList.remove('active');activeReturnId=null;}
 
 /* ---------- receipts ---------- */
